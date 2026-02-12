@@ -1,0 +1,668 @@
+{
+  "name": "Telegram Resume to Portfolio Builder",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {
+          "download": true,
+          "imageSize": "large"
+        }
+      },
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [
+        -464,
+        32
+      ],
+      "webhookId": "telegram-resume-bot",
+      "id": "5da790b9-4aa1-41f0-81b4-3fe3251093b7",
+      "credentials": {
+        "telegramApi": {
+          "id": "WOH3QXkA2PVrpUYW",
+          "name": "Telegram account 8"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"message\"][\"document\"][\"mime_type\"]}}",
+              "operation": "contains",
+              "value2": "pdf"
+            }
+          ]
+        },
+        "combineOperation": "any"
+      },
+      "name": "Check if PDF Resume",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        32
+      ],
+      "id": "ac2a424f-c387-4895-9f3e-75bc340b0659"
+    },
+    {
+      "parameters": {
+        "chatId": "={{$json[\"message\"][\"chat\"][\"id\"]}}",
+        "text": "=✅ Resume received! Processing your portfolio...\n\n⏳ This will take 2-3 minutes.\n\nSteps:\n1. 📄 Extracting resume data\n2. 🤖 AI analysis\n3. 💻 Building Next.js portfolio\n4. 🚀 Deploying to Vercel\n\nPlease wait...",
+        "additionalFields": {}
+      },
+      "name": "Send Processing Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        -112
+      ],
+      "id": "0faaf027-b672-4028-97a5-bec171351fe9",
+      "webhookId": "7eb80af2-9469-43ec-ab54-5afcffe3619b",
+      "credentials": {
+        "telegramApi": {
+          "id": "WOH3QXkA2PVrpUYW",
+          "name": "Telegram account 8"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{$json[\"message\"][\"chat\"][\"id\"]}}",
+        "text": "=❌ Please send a PDF resume file.\n\nSupported format: PDF only",
+        "additionalFields": {}
+      },
+      "name": "Send Error - No PDF",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        128
+      ],
+      "id": "1b6495c1-bc51-4d49-98fc-5cb1e097638f",
+      "webhookId": "ed8b2684-db74-49bf-b8df-f5fe79ca2dba",
+      "credentials": {
+        "telegramApi": {
+          "id": "WOH3QXkA2PVrpUYW",
+          "name": "Telegram account 8"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $('Telegram Trigger').item.json.message.document.file_id }}",
+        "additionalFields": {}
+      },
+      "name": "Download Resume PDF",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        208,
+        -80
+      ],
+      "id": "a0ab835b-e50e-4721-95a6-752e173e6516",
+      "webhookId": "8fbd0b0d-f0a0-4cdf-bb6f-698ec0e82816",
+      "credentials": {
+        "telegramApi": {
+          "id": "WOH3QXkA2PVrpUYW",
+          "name": "Telegram account 8"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "name": "Extract Text from PDF",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        432,
+        -80
+      ],
+      "id": "413fc56d-c490-4ce9-baae-b9f551e7f7f2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Get extracted text from the previous node\nconst extractedText = $input.first().json.text || '';\n\n// 2. Get telegram data using the correct node name\n// Note: Changed 'Telegram Bot Trigger' to 'Telegram Trigger'\nconst telegramData = $('Telegram Trigger').first().json.message;\n\nconst userId = telegramData.from.id;\nconst userName = telegramData.from.first_name + \n(telegramData.from.last_name ? ' ' + telegramData.from.last_name : '');\n\nconst chatId = telegramData.chat.id;\nconst username = telegramData.from.username || `user${userId}`;\n\nreturn {\n  json: {\n    user_id: userId,\n    user_name: userName,\n    chat_id: chatId,\n    telegram_username: username,\n    resume_text: extractedText,\n    timestamp: new Date().toISOString() // Using ISO string for better readability\n  }\n};"
+      },
+      "name": "Prepare Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        -80
+      ],
+      "id": "5538bede-a124-4592-903c-aee2ffe71428"
+    },
+    {
+      "parameters": {
+        "jsCode": "const geminiResponse = $input.first().json;\nconst previousData = $('Prepare Data').first().json;\n\nlet resumeData = {};\n\ntry {\n  const responseText = geminiResponse?.output || geminiResponse?.text || \"\";\n  \n  if (!responseText) {\n    throw new Error(\"Empty AI response\");\n  }\n  \n  let cleaned = responseText\n    .replace(/```json/gi, \"\")\n    .replace(/```/g, \"\")\n    .trim();\n  \n  const firstBrace = cleaned.indexOf(\"{\");\n  const lastBrace = cleaned.lastIndexOf(\"}\");\n  \n  if (firstBrace === -1 || lastBrace === -1) {\n    throw new Error(\"No JSON found\");\n  }\n  \n  cleaned = cleaned.substring(firstBrace, lastBrace + 1);\n  const parsed = JSON.parse(cleaned);\n  \n  // Validation\n  if (!parsed.name || !parsed.summary) {\n    throw new Error(\"Invalid resume structure\");\n  }\n  \n  if (parsed.project_name || parsed.structure) {\n    throw new Error(\"Received project JSON instead of resume JSON\");\n  }\n  \n  resumeData = parsed;\n} catch (error) {\n  console.log(\"Parse failed:\", error.message);\n  resumeData = {\n    name: previousData.user_name || \"\",\n    title: \"\",\n    email: \"\",\n    phone: \"\",\n    location: \"\",\n    summary: previousData.resume_text || \"\",\n    skills: [],\n    experience: [],\n    education: [],\n    projects: [],\n    links: {}\n  };\n}\n\n// Force structure safety\nresumeData.skills = Array.isArray(resumeData.skills) ? resumeData.skills : [];\nresumeData.experience = Array.isArray(resumeData.experience) ? resumeData.experience : [];\nresumeData.education = Array.isArray(resumeData.education) ? resumeData.education : [];\nresumeData.projects = Array.isArray(resumeData.projects) ? resumeData.projects : [];\nresumeData.links = typeof resumeData.links === \"object\" && resumeData.links !== null ? resumeData.links : {};\n\nreturn {\n  json: {\n    ...previousData,\n    resumeData\n  }\n};"
+      },
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        -80
+      ],
+      "id": "1a4b704d-1f3d-4874-a181-ce6de80555ce"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ==========================================\n// GENERATE NEXT.JS PORTFOLIO FILES - FIXED\n// ==========================================\n\nconst inputData = $input.first().json;\nconst resume = inputData.resumeData || {};\n\nconst userName = inputData.user_name || \"user\";\nconst chatId = inputData.chat_id || Date.now();\n\nconst cleanName = userName.toLowerCase().replace(/[^a-z0-9]/g, \"-\");\nconst randomSuffix = Math.random().toString(36).substring(2, 5);\nconst projectName = `portfolio-${chatId.toString().slice(-6)}-${randomSuffix}`;\n\nconsole.log('📦 Generating Next.js portfolio:', projectName);\n\n// ==========================================\n// PACKAGE.JSON - FIXED (Tailwind in dependencies)\n// ==========================================\nconst packageJson = {\n  \"name\": projectName,\n  \"version\": \"1.0.0\",\n  \"private\": true,\n  \"scripts\": {\n    \"dev\": \"next dev\",\n    \"build\": \"next build\",\n    \"start\": \"next start\"\n  },\n  \"dependencies\": {\n    \"next\": \"14.0.4\",\n    \"react\": \"18.2.0\",\n    \"react-dom\": \"18.2.0\",\n    \"tailwindcss\": \"3.4.0\",\n    \"postcss\": \"8.4.0\",\n    \"autoprefixer\": \"10.4.0\"\n  }\n};\n\n// ==========================================\n// PAGES/INDEX.JS\n// ==========================================\nconst indexPage = `export default function Home() {\n  const resume = ${JSON.stringify(resume, null, 2)};\n\n  return (\n    <div className=\"min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 text-white\">\n      <header className=\"container mx-auto px-4 py-16 text-center\">\n        <h1 className=\"text-5xl font-bold mb-4\">{resume.name || 'Portfolio'}</h1>\n        <h2 className=\"text-2xl text-blue-300 mb-6\">{resume.title || 'Professional'}</h2>\n        <p className=\"text-gray-300 max-w-2xl mx-auto mb-8\">\n          {resume.summary || 'Welcome to my portfolio'}\n        </p>\n        \n        <div className=\"flex justify-center gap-4 flex-wrap\">\n          {resume.email && (\n            <a \n              href={\\`mailto:\\${resume.email}\\`}\n              className=\"bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-full transition\"\n            >\n              📧 Email\n            </a>\n          )}\n          {resume.links?.github && (\n            <a \n              href={resume.links.github}\n              target=\"_blank\"\n              rel=\"noopener noreferrer\"\n              className=\"bg-gray-700 hover:bg-gray-600 px-6 py-2 rounded-full transition\"\n            >\n              🔗 GitHub\n            </a>\n          )}\n          {resume.links?.linkedin && (\n            <a \n              href={resume.links.linkedin}\n              target=\"_blank\"\n              rel=\"noopener noreferrer\"\n              className=\"bg-blue-700 hover:bg-blue-600 px-6 py-2 rounded-full transition\"\n            >\n              💼 LinkedIn\n            </a>\n          )}\n        </div>\n      </header>\n\n      {resume.skills && resume.skills.length > 0 && (\n        <section className=\"container mx-auto px-4 py-12\">\n          <h3 className=\"text-3xl font-bold mb-6 text-center\">🚀 Skills</h3>\n          <div className=\"flex flex-wrap justify-center gap-3 max-w-4xl mx-auto\">\n            {resume.skills.map((skill, i) => (\n              <span \n                key={i}\n                className=\"bg-blue-600/30 border border-blue-400 px-4 py-2 rounded-lg\"\n              >\n                {skill}\n              </span>\n            ))}\n          </div>\n        </section>\n      )}\n\n      {resume.experience && resume.experience.length > 0 && (\n        <section className=\"container mx-auto px-4 py-12\">\n          <h3 className=\"text-3xl font-bold mb-8 text-center\">💼 Experience</h3>\n          <div className=\"max-w-4xl mx-auto space-y-6\">\n            {resume.experience.map((exp, i) => (\n              <div \n                key={i}\n                className=\"bg-white/10 backdrop-blur-sm rounded-lg p-6 border border-white/20\"\n              >\n                <h4 className=\"text-xl font-bold text-blue-300\">\n                  {exp.position || 'Position'}\n                </h4>\n                <p className=\"text-gray-300 mb-2\">\n                  {exp.company || 'Company'} • {exp.duration || ''}\n                </p>\n                {exp.description && (\n                  <p className=\"text-gray-400 mt-2\">{exp.description}</p>\n                )}\n              </div>\n            ))}\n          </div>\n        </section>\n      )}\n\n      {resume.projects && resume.projects.length > 0 && (\n        <section className=\"container mx-auto px-4 py-12\">\n          <h3 className=\"text-3xl font-bold mb-8 text-center\">🛠️ Projects</h3>\n          <div className=\"max-w-4xl mx-auto grid md:grid-cols-2 gap-6\">\n            {resume.projects.map((project, i) => (\n              <div \n                key={i}\n                className=\"bg-white/10 backdrop-blur-sm rounded-lg p-6 border border-white/20 hover:scale-105 transition\"\n              >\n                <h4 className=\"text-xl font-bold text-blue-300 mb-2\">\n                  {typeof project === 'string' ? project : project.name || 'Project'}\n                </h4>\n                {project.description && (\n                  <p className=\"text-gray-300 mb-4\">{project.description}</p>\n                )}\n              </div>\n            ))}\n          </div>\n        </section>\n      )}\n\n      {resume.education && resume.education.length > 0 && (\n        <section className=\"container mx-auto px-4 py-12\">\n          <h3 className=\"text-3xl font-bold mb-8 text-center\">🎓 Education</h3>\n          <div className=\"max-w-4xl mx-auto space-y-4\">\n            {resume.education.map((edu, i) => (\n              <div \n                key={i}\n                className=\"bg-white/10 backdrop-blur-sm rounded-lg p-6 border border-white/20\"\n              >\n                <h4 className=\"text-xl font-bold text-blue-300\">\n                  {edu.degree || 'Degree'}\n                </h4>\n                <p className=\"text-gray-300\">\n                  {edu.school || 'School'} • {edu.year || ''}\n                </p>\n              </div>\n            ))}\n          </div>\n        </section>\n      )}\n\n      <footer className=\"container mx-auto px-4 py-12 text-center text-gray-400 border-t border-white/20 mt-12\">\n        <p>Built with Next.js • Deployed on Vercel</p>\n        <p className=\"mt-2\">✨ Auto-generated from resume</p>\n      </footer>\n    </div>\n  );\n}`;\n\n// ==========================================\n// OTHER FILES\n// ==========================================\nconst appPage = `import '../styles/globals.css'\n\nexport default function App({ Component, pageProps }) {\n  return <Component {...pageProps} />\n}`;\n\nconst globalsCss = `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n\n* {\n  box-sizing: border-box;\n  margin: 0;\n  padding: 0;\n}\n\nbody {\n  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;\n}`;\n\nconst tailwindConfig = `/** @type {import('tailwindcss').Config} */\nmodule.exports = {\n  content: [\n    './pages/**/*.{js,ts,jsx,tsx,mdx}',\n  ],\n  theme: {\n    extend: {},\n  },\n  plugins: [],\n}`;\n\nconst postcssConfig = `module.exports = {\n  plugins: {\n    tailwindcss: {},\n    autoprefixer: {},\n  },\n}`;\n\nconst nextConfig = `/** @type {import('next').NextConfig} */\nconst nextConfig = {\n  reactStrictMode: true,\n}\n\nmodule.exports = nextConfig`;\n\nconst readme = `# ${resume.name || 'Portfolio'}\n\nAuto-generated portfolio built with Next.js and Tailwind CSS.\n\n## Tech Stack\n- Next.js 14\n- React 18\n- Tailwind CSS\n\n## Deploy\nDeployed on Vercel\n\nGenerated via Telegram bot`;\n\nconst gitignore = `node_modules\n.next\nout\n.env*.local`;\n\n// ==========================================\n// ASSEMBLE FILES\n// ==========================================\nconst files = {\n  \"package.json\": JSON.stringify(packageJson, null, 2),\n  \"pages/index.js\": indexPage,\n  \"pages/_app.js\": appPage,\n  \"styles/globals.css\": globalsCss,\n  \"tailwind.config.js\": tailwindConfig,\n  \"postcss.config.js\": postcssConfig,\n  \"next.config.js\": nextConfig,\n  \"README.md\": readme,\n  \".gitignore\": gitignore\n};\n\nconsole.log('✅ Generated', Object.keys(files).length, 'files');\n\nreturn {\n  json: {\n    ...inputData,\n    projectName: projectName,\n    files: files\n  }\n};"
+      },
+      "name": "Generate Next.js Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        -80
+      ],
+      "id": "6147c971-6d94-4893-a0f6-ee8a62e0ba02"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get generated files\nconst files = $('Generate Next.js Code').first().json.files;\n\n// Get repository data from HTTP Request node (repo creation)\nconst repoData = $('HTTP Request').first().json;\n\nif (!repoData || !repoData.full_name) {\n  throw new Error('Repository data not found from HTTP Request node.');\n}\n\nconst repoFullName = repoData.full_name; // example: vashithn8nprojects/portfolio-123\nconst githubToken = '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'; // 🔥 paste your token here\n\n// Upload file helper\nasync function uploadFile(path, content) {\n  const url = `https://api.github.com/repos/${repoFullName}/contents/${path}`;\n\n  const response = await this.helpers.httpRequest({\n    method: 'PUT',\n    url,\n    headers: {\n      Authorization: `Bearer ${githubToken}`,\n      Accept: 'application/vnd.github+json'\n    },\n    body: {\n      message: `Add ${path}`,\n      content: Buffer.from(content).toString('base64'),\n      branch: 'main'\n    },\n    json: true\n  });\n\n  return response;\n}\n\nconst results = [];\n\nfor (const [path, content] of Object.entries(files)) {\n  const result = await uploadFile.call(this, path, content);\n  results.push({ path, status: 'uploaded' });\n}\n\nreturn results.map(r => ({ json: r }));"
+      },
+      "name": "Push Files to GitHub",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2416,
+        -80
+      ],
+      "id": "0f867b91-facf-4b2c-9343-ba023832c9f6"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vercel.com/v13/deployments",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer vcp_3CjmVOEankFoMSJaiJ7BUCuJfSHpSd0CvvcYJAGR5KjdIDacuf2xivpf"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"{{$items('HTTP Request')[0].json.name}}\",\n  \"gitSource\": {\n    \"type\": \"github\",\n    \"repoId\": {{$items('HTTP Request')[0].json.id}},\n    \"ref\": \"main\"\n  },\n  \"projectSettings\": {\n    \"framework\": \"nextjs\",\n    \"buildCommand\": \"npm run build\",\n    \"outputDirectory\": \".next\"\n  }\n}\n",
+        "options": {}
+      },
+      "name": "Deploy to Vercel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2784,
+        -80
+      ],
+      "id": "b78cbead-524b-4cdc-bb35-c43418f0badc",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "JZ2cLfdVb9gvlLSm",
+          "name": "Header Auth account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{$('Generate Next.js Code').first().json.chat_id}}\n",
+        "text": "=✅ Portfolio Deployed!\n\n🚀 Your portfolio is live!\n\n🌐 Portfolio:\nhttps://{{$('Deploy to Vercel').first().json.url}}\n\nIt may take 30-60 seconds to fully load.\n\nBuilt with Next.js + Tailwind CSS 🎨\n",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "name": "Send Success Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        3232,
+        -80
+      ],
+      "id": "fb2deabb-8104-43a4-9bd3-b203b658d654",
+      "webhookId": "3373e1d4-0d09-4cb6-bc68-ef0a0e484910",
+      "credentials": {
+        "telegramApi": {
+          "id": "WOH3QXkA2PVrpUYW",
+          "name": "Telegram account 8"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.id }}",
+        "text": "=❌ **Deployment Failed**\\n\\nSorry, there was an error deploying your portfolio.\\n\\n**Error Details:**\\n{{$json.error}}\\n\\nPlease try again or contact support.",
+        "additionalFields": {}
+      },
+      "name": "Send Error Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        4192,
+        80
+      ],
+      "id": "5de2779c-ecb0-4e03-8f1b-257e7fa53b04",
+      "webhookId": "50ac4c04-fa80-4409-a5c3-0a8a736b890e",
+      "credentials": {
+        "telegramApi": {
+          "id": "o86dAIv06ycJg7vl",
+          "name": "Telegram account 7"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.readyState}}\n",
+              "value2": "READY"
+            }
+          ]
+        }
+      },
+      "name": "Check Deployment Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        3008,
+        832
+      ],
+      "id": "5d177012-5f4b-40ec-8190-9056fec5cf93"
+    },
+    {
+      "parameters": {
+        "errorMessage": "={{$json}}"
+      },
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        4208,
+        336
+      ],
+      "id": "ea0a08df-7e31-483a-af92-d86f9f50b349"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=\n\nYou are a senior full-stack engineer and resume intelligence system.\n\nYour task has TWO PHASES:\n\nPHASE 1 — Parse Resume\nPHASE 2 — Generate Production Portfolio Code\n\nYou MUST complete both phases internally and return ONLY the final portfolio project JSON.\n\n---\n\nINPUT:\nResume text:\n{{$json[\"resume_text\"]}}\n\n---\n\nPHASE 1 — STRUCTURE THE RESUME\n\nExtract structured data in this exact format:\n\n{\n\"name\": \"\",\n\"title\": \"\",\n\"email\": \"\",\n\"phone\": \"\",\n\"location\": \"\",\n\"summary\": \"\",\n\"skills\": [],\n\"experience\": [\n{\n\"position\": \"\",\n\"company\": \"\",\n\"duration\": \"\",\n\"description\": []\n}\n],\n\"education\": [\n{\n\"degree\": \"\",\n\"institution\": \"\",\n\"year\": \"\"\n}\n],\n\"projects\": [\n{\n\"name\": \"\",\n\"description\": \"\",\n\"technologies\": [],\n\"link\": \"\"\n}\n],\n\"certifications\": [],\n\"links\": {\n\"github\": \"\",\n\"linkedin\": \"\"\n}\n}\n\nRules for parsing:\n\n* Extract real values from resume text.\n* Do NOT copy full resume into summary.\n* Summary must be 2–4 professional sentences.\n* Skills must be individual clean items.\n* Separate projects properly.\n* Separate education entries properly.\n* If field missing → use \"\" or [].\n* Do NOT invent fake data.\n* Do NOT add demo placeholders.\n\n---\n\nPHASE 2 — GENERATE COMPLETE NEXT.JS 14 PORTFOLIO\n\nUsing the structured resume data you created above:\n\nGenerate a production-ready portfolio website with:\n\n• Next.js 14\n• App Router (app directory, NOT pages)\n• Tailwind CSS\n• Dark professional theme\n• Fully responsive\n• Clean modern UI\n• No demo data\n• No placeholder skills\n• Only real resume data\n• If a section array is empty → do NOT render that section\n\nSections required:\n\n* Hero\n* About\n* Skills\n* Experience (if exists)\n* Projects (if exists)\n* Education (if exists)\n* Certifications (if exists)\n* Contact\n\n---\n\nOUTPUT FORMAT (VERY STRICT)\n\nReturn ONLY valid JSON.\nDo NOT use markdown.\nDo NOT use code blocks.\nDo NOT explain anything.\nDo NOT include comments outside strings.\nDo NOT include backticks.\n\nReturn EXACTLY this structure:\n\n{\n\"project_name\": \"portfolio\",\n\"structure\": {\n\"package.json\": \"\",\n\"next.config.js\": \"\",\n\"tailwind.config.js\": \"\",\n\"postcss.config.js\": \"\",\n\"app/layout.js\": \"\",\n\"app/page.js\": \"\",\n\"app/globals.css\": \"\"\n}\n}\n\nAll file contents must be valid JavaScript or config code as string values.\n\nEscape quotes properly.\n\nReturn ONLY valid JSON.\n\n-",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1008,
+        -80
+      ],
+      "id": "9f1d9961-10ff-4a86-837c-957b7ff8ade8",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        784,
+        128
+      ],
+      "id": "f59b752f-08ad-4c24-864d-e438ba9a5cbd",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "EBq5pUoBgFkX1nKc",
+          "name": "Google Gemini(PaLM) Api account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c2ee22e8-d109-4aad-97b4-db4f91f824fc",
+              "name": "path",
+              "value": "={{ $json.path }}",
+              "type": "string"
+            },
+            {
+              "id": "251abcde-a028-4800-bd25-836efdf48f63",
+              "name": "content",
+              "value": "={{ $json.status }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2528,
+        688
+      ],
+      "id": "5aa226c7-8a4b-4613-a56d-191eee1b6a69",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "resource": "repository",
+        "operation": "create",
+        "owner": {
+          "__rl": true,
+          "value": "=vashithn8nprojects",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "=portfolio-{{$execution.id}}\n",
+          "mode": "name"
+        }
+      },
+      "id": "eef3c079-8246-4a94-8501-2424f30daae5",
+      "name": "Create GitHub Repository",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [
+        1936,
+        704
+      ],
+      "webhookId": "123d2f90-e5f4-42b0-8159-a2986bb1f429",
+      "credentials": {
+        "githubApi": {
+          "id": "6PaLzlZoDYTi6AiF",
+          "name": "GitHub account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.github.com/user/repos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "oAuth2Api",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "={\n  \"Accept\": \"application/vnd.github+json\",\n  \"Content-Type\": \"application/json\"\n}\n",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"portfolio-{{$json.user_id}}-{{$execution.id}}\",\n  \"private\": false\n  \n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2048,
+        -80
+      ],
+      "id": "f08043c4-9884-4736-b00a-8362b59dc0cd",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "JZ2cLfdVb9gvlLSm",
+          "name": "Header Auth account 3"
+        },
+        "oAuth2Api": {
+          "id": "JYt69tz6SK3C5pdP",
+          "name": "Unnamed credential 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 120
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2960,
+        928
+      ],
+      "id": "b43ea8b3-dbe3-4df6-9269-026fc5a5d6a2",
+      "name": "Wait",
+      "webhookId": "d5cb26c6-6d64-4d1c-aba4-f7012d2d2eb6"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.vercel.com/v13/deployments/={{$('Deploy to Vercel').first().json.id}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3456,
+        928
+      ],
+      "id": "08566be5-8851-4261-a0ca-d68b571f26e2",
+      "name": "Check Deployment status",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "JZ2cLfdVb9gvlLSm",
+          "name": "Header Auth account 3"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Check if PDF Resume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if PDF Resume": {
+      "main": [
+        [
+          {
+            "node": "Send Processing Message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Download Resume PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Error - No PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Processing Message": {
+      "main": [
+        [
+          {
+            "node": "Download Resume PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Resume PDF": {
+      "main": [
+        [
+          {
+            "node": "Extract Text from PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Text from PDF": {
+      "main": [
+        [
+          {
+            "node": "Prepare Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Data": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Generate Next.js Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Next.js Code": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push Files to GitHub": {
+      "main": [
+        [
+          {
+            "node": "Deploy to Vercel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deploy to Vercel": {
+      "main": [
+        [
+          {
+            "node": "Send Success Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Deployment Success": {
+      "main": [
+        [],
+        []
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        []
+      ]
+    },
+    "Create GitHub Repository": {
+      "main": [
+        []
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Push Files to GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Check Deployment status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Deployment status": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "99ec6c41-9550-45a2-8ed8-3ef74426856b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "710f3269e0e75e920140fa523dc2480007b8dd17802fb377f70a9ee9c6297189"
+  },
+  "id": "FzW4r8eIPD7yUORo9VFJ5",
+  "tags": []
+}
