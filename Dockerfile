@@ -1,9 +1,9 @@
 FROM n8nio/n8n:latest
 
-ENV N8N_PORT=5678
+WORKDIR /home/node
 
 EXPOSE 5678
 
 USER node
 
-CMD ["n8n"]
+CMD n8n start
