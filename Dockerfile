@@ -6,6 +6,7 @@ WORKDIR /home/node
 # Set environment variables
 ENV N8N_PORT=5678
 ENV N8N_PROTOCOL=https
+ENV N8N_HOST=0.0.0.0
 ENV N8N_ENCRYPTION_KEY=change-this-to-random-string
 ENV EXECUTIONS_DATA_SAVE_ON_ERROR=all
 ENV EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
@@ -23,5 +24,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s \
 
 # Start n8n
 CMD  n8n
+
+
+
+
 
 
